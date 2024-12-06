@@ -1,12 +1,14 @@
 use std::fs;
+use std::cmp;
 
 fn main() {
     let file_path = "./input.txt";
     let input = fs::read_to_string(file_path)
         .expect("Should have been able to read the file {file_path}");
-    let c = valid(&parse(&input).unwrap());
-    let m = 0;
-    println!("{c} / {m}");
+    let mut man = parse(&input).unwrap();
+    let v = valid(&man);
+    let i = invalid(&mut man);
+    println!("{v} / {i}");
 }
 
 type Rules = Vec<[u32;2]>;
@@ -14,6 +16,7 @@ type Rules = Vec<[u32;2]>;
 trait Pages {
     fn middle(&self) -> u32;
     fn is_ordered(&self, rules: &Rules) -> bool;
+    fn order(&mut self, rules: &Rules) -> &Self;
 }
 
 struct Man {
@@ -45,6 +48,24 @@ impl Pages for Vec<u32> {
             }
         }
         true
+    }
+    fn order(&mut self, rules: &Rules) -> &Vec<u32> {
+        // println!("u {self:?}");
+        self.sort_by(|a, b| {
+            for r in rules {
+                let l = r[0];
+                let h = r[1];
+                if *a == l && *b == h {
+                    return cmp::Ordering::Less;
+                }
+                if *a == h && *b == l {
+                    return cmp::Ordering::Greater;
+                }
+            }
+            cmp::Ordering::Equal
+        });
+        // println!("o {self:?}");
+        self
     }
 }
 
@@ -93,7 +114,14 @@ fn parse(input: &str) -> Option<Man> {
 }
 
 fn valid(m: &Man) -> i64 {
-    m.pages.iter().filter(|p| p.is_ordered(&m.rules)).fold(0, |s,p| s + i64::from(p.middle()))
+    m.pages.iter().filter(|p| p.is_ordered(&m.rules))
+        .fold(0, |s,p| s + i64::from(p.middle()))
+}
+
+fn invalid(m: &mut Man) -> i64 {
+    m.pages.iter_mut().filter(|p| !p.is_ordered(&m.rules))
+        .map(|p| p.order(&m.rules))
+        .fold(0, |s,p| s + i64::from(p.middle()))
 }
 
 #[cfg(test)]
@@ -103,10 +131,12 @@ use super::*;
 #[test]
 fn test_0() {
     let input = "
-1|2
+2|1
 
-2,1";
-    assert_eq!(valid(&parse(input).unwrap()), 0);
+1,2,3";
+    let mut m = parse(input).unwrap();
+    assert_eq!(valid(&m), 0, "valid");
+    assert_eq!(invalid(&mut m), 1, "invalid");
 }
 
 #[test]
@@ -115,7 +145,9 @@ fn test_2() {
 1|2
 
 1,2,3";
-    assert_eq!(valid(&parse(input).unwrap()), 2);
+    let mut m = parse(input).unwrap();
+    assert_eq!(valid(&m), 2, "valid");
+    assert_eq!(invalid(&mut m), 0, "invalid");
 }
 
 #[test]
@@ -150,8 +182,9 @@ fn test_orders() {
 61,13,29
 97,13,75,29,47
 ";
-    let m = parse(input).unwrap();
-    assert_eq!(valid(&m), 143);
+    let mut m = parse(input).unwrap();
+    assert_eq!(valid(&m), 143, "valid");
+    assert_eq!(invalid(&mut m), 123, "invalid");
 }
 
 }
