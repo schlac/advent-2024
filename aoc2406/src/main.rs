@@ -1,12 +1,14 @@
+use std::collections::HashMap;
 use std::fs;
 
 fn main() {
     let file_path = "./input.txt";
     let input = fs::read_to_string(file_path)
         .expect("Should have been able to read the file {file_path}");
-    let mut g = parse(&input).unwrap();
-    let c = g.run().count();
-    println!("{c}");
+    let g = parse(&input).unwrap();
+    let c = g.clone().run().unwrap().count();
+    let o = obstructions(g);
+    println!("{c} / {o}");
 }
 
 #[derive(Clone, Copy)]
@@ -14,12 +16,13 @@ struct Block {
     c: char,
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Hash, PartialEq, Eq)]
 struct Pos {
     x: isize,
     y: isize,
 }
 
+#[derive(Clone)]
 struct Grid {
     width: isize,
     height: isize,
@@ -93,11 +96,11 @@ impl Grid {
         self.pos = Pos {x: x, y: y };
     }
     fn step(&mut self) -> &Self {
-        let mut c = self.get_current().c;
-        let mut next = self.pos;
         if !self.is_runnable() {
             return self;
         }
+        let mut c = self.get_current().c;
+        let mut next = self.pos;
         loop {
             match c {
                 '^' => { next = self.calc_next_pos(0, -1); },
@@ -135,11 +138,20 @@ impl Grid {
         }
         self
     }
-    fn run(&mut self) -> &Self {
+    fn run(&mut self) -> Option<&Self> {
+        let mut visited = HashMap::new();
         while self.is_runnable() {
+            let c = &self.get_current().c;
+            let mut v: String = visited.entry(self.pos).or_insert(String::from("")).to_string();
+            if v.contains(*c) {
+                self.print();
+                return None;
+            }
+            v.push(*c);
+            visited.insert(self.pos, v);
             self.step();
         }
-        self
+        Some(self)
     }
     fn count(&self) -> isize {
         self.grid.iter().fold(0, |s1,r| s1 + r.iter().fold(0, |s2, c| s2 + c.value() ))
@@ -192,6 +204,25 @@ fn parse(input: &str) -> Option<Grid> {
     Some(g)
 }
 
+fn obstructions(g: Grid) -> usize {
+    let mut found = 0;
+    for y in 0..g.width {
+        for x in 0..g.height {
+            let mut g2 = g.clone();
+            let c = g2.get(x, y).c;
+            match c {
+                '.' => g2.set(x, y, '#'),
+                _ => {},
+            }
+            match g2.run() {
+                None => found += 1,
+                _ => {},
+            }
+        }
+    }
+    found
+}
+
 #[cfg(test)]
 mod tests {
 use super::*;
@@ -208,7 +239,7 @@ fn test_turnturn() {
     assert_eq!(g.width, 9);
     assert_eq!(g.height, 4);
     assert_eq!(g.print().count(), 1);
-    assert_eq!(g.run().print().count(), 3);
+    assert_eq!(g.run().unwrap().print().count(), 3);
 }
 
 #[test]
@@ -234,7 +265,28 @@ fn test_run() {
     assert_eq!(g.steps(4).print().count(), 10);
     assert_eq!(g.steps(5).print().count(), 15);
     assert_eq!(g.steps(6).print().count(), 20);
-    assert_eq!(g.run().print().count(), 41);
+    assert_eq!(g.run().unwrap().print().count(), 41);
+}
+
+#[test]
+fn test_obstructions() {
+    let input = "
+....#.....
+.........#
+..........
+..#.......
+.......#..
+..........
+.#..^.....
+........#.
+#.........
+......#...
+";
+    let g = parse(input).unwrap();
+    assert_eq!(g.width, 10);
+    assert_eq!(g.height, 10);
+
+    assert_eq!(obstructions(g), 6);
 }
 
 }
