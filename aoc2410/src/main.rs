@@ -12,8 +12,8 @@ fn main() {
     let input = fs::read_to_string(file_path)
         .expect("Should have been able to read the file {file_path}");
     let g = grid::Grid::parse(&input).unwrap();
-    let r1 = paths(g);
-    let r2 = 0;
+    let r1 = paths(&g);
+    let r2 = dpaths(&g);
     println!("{r1} / {r2}");
 }
 
@@ -34,7 +34,6 @@ fn nx(g: &Grid, path: Path, nc: &char) -> Vec<Path> {
 fn paths_from(g: &Grid, p0: Pos) -> Option<Vec<Path>> {
     match g.get(&p0) {
         Some('0') => {
-            let mut known = HashSet::new();
             let paths: Vec<Path> = [vec![p0]].into_iter()//.inspect(|p| println!("0{:?}", p))
                 .flat_map(|path| nx(g, path, &'1'))//.inspect(|p| println!("1{:?}", p))
                 .flat_map(|path| nx(g, path, &'2'))//.inspect(|p| println!("2{:?}", p))
@@ -45,13 +44,6 @@ fn paths_from(g: &Grid, p0: Pos) -> Option<Vec<Path>> {
                 .flat_map(|path| nx(g, path, &'7'))//.inspect(|p| println!("7{:?}", p))
                 .flat_map(|path| nx(g, path, &'8'))//.inspect(|p| println!("8{:?}", p))
                 .flat_map(|path| nx(g, path, &'9'))//.inspect(|p| println!("9{:?}", p))
-                .filter(|path|{
-                    let start = path.first();
-                    let end = path.last();
-                    known.insert(format!("{},{}..{},{}",
-                        start.unwrap().x, start.unwrap().y,
-                        end.unwrap().x, end.unwrap().y))
-                })
                 .collect();
             if paths.len() > 0 {
                 return Some(paths);
@@ -62,9 +54,17 @@ fn paths_from(g: &Grid, p0: Pos) -> Option<Vec<Path>> {
     None
 }
 
-fn paths(g: Grid) -> usize {
+fn paths(g: &Grid) -> usize {
+    let mut known = HashSet::new();
     g.iter().flat_map(|p| paths_from(&g, p))
         .flatten()
+        .filter(|path|{
+            let start = path.first();
+            let end = path.last();
+            known.insert(format!("{},{}..{},{}",
+                start.unwrap().x, start.unwrap().y,
+                end.unwrap().x, end.unwrap().y))
+        })
         // .inspect(|p| {
         //     for pos in p {
         //         print!("{}:{}{} ", g.get(&pos).unwrap(), pos.x, pos.y);
@@ -72,6 +72,12 @@ fn paths(g: Grid) -> usize {
         //     // println!("{:?}", p);
         //     println!("");
         // })
+        .count()
+}
+
+fn dpaths(g: &Grid) -> usize {
+    g.iter().flat_map(|p| paths_from(&g, p))
+        .flatten()
         .count()
 }
 
@@ -91,7 +97,22 @@ fn test_smaller() {
 9.....9
 ";
     let g = Grid::parse(input).unwrap();
-    assert_eq!(paths(g), 2);
+    assert_eq!(paths(&g), 2);
+}
+
+#[test]
+fn test_smaller_d() {
+    let input = "
+..90..9
+...1.98
+...2..7
+6543456
+765.987
+876....
+987....
+";
+    let g = Grid::parse(input).unwrap();
+    assert_eq!(dpaths(&g), 13);
 }
 
 #[test]
@@ -106,7 +127,21 @@ fn test_small() {
 .....01
 ";
     let g = Grid::parse(input).unwrap();
-    assert_eq!(paths(g), 3);
+    assert_eq!(paths(&g), 3);
+}
+
+#[test]
+fn test_small_d() {
+    let input = "
+012345
+123456
+234567
+345678
+4.6789
+56789.
+";
+    let g = Grid::parse(input).unwrap();
+    assert_eq!(dpaths(&g), 227);
 }
 
 #[test]
@@ -122,7 +157,8 @@ fn test_mid() {
 10456732
 ";
     let g = Grid::parse(input).unwrap();
-    assert_eq!(paths(g), 36);
+    assert_eq!(paths(&g), 36);
+    assert_eq!(dpaths(&g), 81);
 }
 
 }
