@@ -7,12 +7,17 @@ fn main() {
     let file_path = "./input.txt";
     let input = fs::read_to_string(file_path)
         .expect("Should have been able to read the file");
-    let i = parse(&input);
-    let r1 = win_sum(i);
-    let r2 = 0;
+    let i = &parse(&input);
+    let r1 = win_sum(i.clone());
+    let i2: Vec<G> = i.clone().into_iter().map(|mut g|{
+        g.goal = g.goal + Pos {x:10000000000000, y:10000000000000}; g
+    }).collect();
+    // println!("{:?}", &i2);
+    let r2 = win_sum2(i2.clone());
     println!("{r1} / {r2}");
 }
 
+const MAX_CLICKS: Size = 100;
 type Size = i64;
 
 #[derive(Clone,Copy,Hash,PartialEq,Debug)]
@@ -88,15 +93,20 @@ fn win_sum(g: impl IntoIterator<Item=G>) -> Size {
         .fold(0, |sum,s| sum + s.unwrap().price())
 }
 
-const MAX_CLICKS: Size = 100;
+fn win_sum2(g: impl IntoIterator<Item=G>) -> Size {
+    g.into_iter()
+        .map(solve2)
+        .filter(|s| s.is_some())
+        .fold(0, |sum,s| sum + s.unwrap().price())
+}
 
 fn solve(g: G) -> Option<S> {
     let goal = g.goal;
     let (ax, bx, gx) = (g.a.pos.x, g.b.pos.x, goal.x);
     let (ay, by, gy) = (g.a.pos.y, g.b.pos.y, goal.y);
 
-    let max_a = min(min(gx / ax + 1, gy / ay + 1), MAX_CLICKS);
-    let max_b = min(min(gx / bx + 1, gy / by + 1), MAX_CLICKS);
+    let max_a = min(gx / ax + 1, gy / ay + 1);
+    let max_b = min(gx / bx + 1, gy / by + 1);
 
     let mut hits: Vec<S> = vec![];
     for i in 0..max_a {
@@ -117,10 +127,26 @@ fn solve(g: G) -> Option<S> {
     }
     hits.sort_by(|a,b|a.price().cmp(&b.price()));
     if hits.len() > 0 {
-        let hit = hits[0].clone();
         return Some(hits[0].clone());
     }
     None
+}
+
+fn solve2(g: G) -> Option<S> {
+    let d = g.a.pos.x * g.b.pos.y - g.a.pos.y * g.b.pos.x;
+    let a = (g.goal.x * g.b.pos.y - g.goal.y * g.b.pos.x) / d;
+    let b = (g.a.pos.x * g.goal.y - g.a.pos.y * g.goal.x) / d;
+
+    if g.goal.x == a * g.a.pos.x + b * g.b.pos.x 
+    && g.goal.y == a * g.a.pos.y + b * g.b.pos.y {
+        let hit = S {
+            a: (a,g.a.clone()),
+            b: (Size::try_from(b).unwrap(),g.b.clone()),
+        };
+        Some(hit)
+    } else {
+        None
+    }
 }
 
 #[cfg(test)]
@@ -134,6 +160,7 @@ Button B: X+22, Y+67
 Prize: X=8400, Y=5400
 ".to_string();
         assert_eq!(win_sum(parse(&input)), 280);
+        assert_eq!(win_sum2(parse(&input)), 280);
     }
 
     #[test]
@@ -144,6 +171,7 @@ Button B: X+67, Y+21
 Prize: X=12748, Y=12176
 ".to_string();
         assert_eq!(win_sum(parse(&input)), 0);
+        assert_eq!(win_sum2(parse(&input)), 0);
     }
 
     #[test]
@@ -154,6 +182,7 @@ Button B: X+84, Y+37
 Prize: X=7870, Y=6450
 ".to_string();
         assert_eq!(win_sum(parse(&input)), 200);
+        assert_eq!(win_sum2(parse(&input)), 200);
     }
 
     #[test]
@@ -164,6 +193,7 @@ Button B: X+27, Y+71
 Prize: X=18641, Y=10279
 ".to_string();
         assert_eq!(win_sum(parse(&input)), 0);
+        assert_eq!(win_sum2(parse(&input)), 0);
     }
 
     #[test]
@@ -186,6 +216,7 @@ Button B: X+27, Y+71
 Prize: X=18641, Y=10279
 ".to_string();
         assert_eq!(win_sum(parse(&input)), 480);
+        assert_eq!(win_sum2(parse(&input)), 480);
     }
 
     #[test]
@@ -200,5 +231,29 @@ Button B: X+13, Y+81
 Prize: X=1339, Y=5568
 ".to_string();
         assert_eq!(win_sum(parse(&input)), 315);
+        assert_eq!(win_sum2(parse(&input)), 315);
     }
+
+    #[test]
+    fn test_10000() {
+        let input = "
+Button A: X+94, Y+34
+Button B: X+22, Y+67
+Prize: X=10000000008400, Y=10000000005400
+
+Button A: X+26, Y+66
+Button B: X+67, Y+21
+Prize: X=10000000012748, Y=10000000012176
+
+Button A: X+17, Y+86
+Button B: X+84, Y+37
+Prize: X=10000000007870, Y=10000000006450
+
+Button A: X+69, Y+23
+Button B: X+27, Y+71
+Prize: X=10000000018641, Y=10000000010279
+".to_string();
+        assert_eq!(win_sum2(parse(&input)), 875318608908);
+    }
+
 }
