@@ -1,9 +1,16 @@
 use std::collections::HashMap;
 
-#[derive(Clone, Copy, Debug, Hash, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub struct Pos {
     pub x: isize,
     pub y: isize,
+}
+
+impl std::hash::Hash for Pos {
+    #[inline(always)]
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        (self.x ^ (self.y << 32)).hash(state);
+    }
 }
 
 impl std::fmt::Display for Pos {

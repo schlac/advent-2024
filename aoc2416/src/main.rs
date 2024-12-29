@@ -16,7 +16,9 @@ fn main() {
     let mut grid = parse(&input)
         .expect("Parse failed");
     grid.solve();
-    println!("{} / {}", grid.cost_to_end().expect("not solved"), 0);
+    println!("{} / {}",
+        grid.cost_to_end().expect("not solved"),
+        grid.tiles_to_end().expect("not solved"));
 }
 
 fn parse(input: &String) -> Option<Maze> {
@@ -62,6 +64,7 @@ impl std::fmt::Display for Direction {
 }
 
 impl Direction {
+    #[inline(always)]
     fn values() -> [Direction; 4] {
         [ EAST, SOUTH, WEST, NORTH, ]
     }
@@ -75,6 +78,7 @@ impl Direction {
         }
         new
     }
+    #[inline(always)]
     fn turn(&self, to: &Direction) -> usize {
         match self {
             s if s == to => { return 0; },
@@ -92,6 +96,7 @@ impl Direction {
             },
         }
     }
+    #[inline(always)]
     fn from_pos(f: &Pos, t: &Pos) -> Direction {
         let dx = f.x - t.x;
         let dy = f.y - t.y;
@@ -115,15 +120,23 @@ impl Direction {
 
 type RCell = Rc<RefCell<Cell>>;
 
-#[derive(Clone,Hash,Debug,PartialEq,Eq)]
+#[derive(Clone,Debug,PartialEq,Eq)]
 struct Path {
     start_direction: Direction,
     cells: Vec<Pos>,
 }
 
+impl std::hash::Hash for Path {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        self.cells.hash(state);
+    }
+}
+
 impl Path {
     fn new(start: Pos, start_direction: Direction) -> Self {
-        Self { cells: vec![start], start_direction }
+        let mut cells = Vec::<Pos>::with_capacity(20);
+        cells.push(start);
+        Self { cells, start_direction }
     }
     fn extend(&self, next: Pos) -> Self {
         let mut p = self.clone();
@@ -167,14 +180,18 @@ impl Cell {
         Cell {
             pos,
             paths: HashSet::new(),
-            best_cost: usize::MAX - (Cost::STEP as usize) - (Cost::TURN as usize),
+            best_cost: usize::MAX,
         }
     }
     fn new_d(&self, d: Direction) -> Self {
         Self::new(d.pos(&self.pos))
     }
+    #[inline(always)]
     fn edge_cost(&self) -> usize {
-        self.best_cost + (Cost::STEP as usize) + (Cost::TURN as usize)
+        match self.best_cost {
+            usize::MAX => self.best_cost,
+            _ => self.best_cost,// + 1010//+ (Cost::STEP as usize), + (Cost::TURN as usize)
+        }
     }
 }
 
@@ -198,8 +215,7 @@ impl Maze {
             start: Pos { x: 1, y: (&grid).height - 2 },
             start_direction: EAST,
             end: Pos { x: (&grid).width - 2, y: 1 },
-            cells: HashMap::with_capacity(usize::try_from(
-                (&grid).width * (&grid).height / 2).expect("bad size")),
+            cells: HashMap::with_capacity(nr_cells),
             grid,
         }
     }
@@ -210,17 +226,18 @@ impl Maze {
         self.find_paths();
     }
     fn find_paths(&mut self) {
-        let mut i: u16 = 5000;
-        let mut todo = HashSet::new();
+        let mut i = self.nr_cells as u16;
+        let mut todo = HashSet::with_capacity(400);
         todo.insert(self.start);
         while !todo.is_empty() {
             // println!("cells\n{:?}", &self.cells);
-            let from_pos = todo.iter().last().copied().unwrap();
+            let from_pos = todo.iter().next().copied().unwrap();
             todo.remove(&from_pos);
-            if i >= 5000 {
+            if i >= self.nr_cells as u16 {
                 i = 0;
                 println!("\nTODO: {}\nVISITED: {}/{}\nNEXT: {:?}",
                     todo.len(), self.cells.len(), self.nr_cells, from_pos);
+                println!("COST: {:?}\nTILES: {:?}", self.cost_to_end(), self.tiles_to_end());
             }
             i += 1;
             let mut new_cells = vec![];
@@ -234,37 +251,32 @@ impl Maze {
                         '.' | 'S' | 'E' => {},
                         _ => { continue; },
                     }
-                    let cell_best = cell.best_cost;
                     from_cell.paths.iter().for_each(|p| {
                         // println!("++ {:?} ++ {:?}", p, pos);
                         if !p.cells.contains(&pos) {
                             let new_path = p.extend(pos);
                             let new_cost = new_path.cost();
                             if new_cost <= cell.edge_cost() {
+                                cell.paths.insert(new_path);
                                 if new_cost < cell.best_cost {
                                     cell.best_cost = new_cost;
                                 }
-                                cell.paths.insert(new_path);
                             }
                         }
                     });
-                    if cell_best != cell.best_cost {
-                        let edge_cost = cell.edge_cost();
-                        cell.paths.retain(|p|p.cost() <= edge_cost);
-                    }
                     // println!();
                     if self.cells.contains_key(&pos) {
                         let mut new = false;
                         let ecell = &mut self.cells.get(&pos).unwrap().borrow_mut();
-                        let ecell_best = ecell.best_cost;
                         cell.paths.into_iter().for_each(|p| {
                             new |= ecell.paths.insert(p);
                         });
+                        if  ecell.best_cost > cell.best_cost {
+                            ecell.best_cost = cell.best_cost;
+                            let edge_cost = ecell.edge_cost();
+                            ecell.paths.retain(|p|p.cost() <= edge_cost);
+                        }
                         if new {
-                            if ecell_best != ecell.best_cost {
-                                let edge_cost = ecell.edge_cost();
-                                ecell.paths.retain(|p|p.cost() <= edge_cost);
-                            }
                             todo.insert(ecell.pos);
                         }
                     } else {
@@ -290,6 +302,21 @@ impl Maze {
     }
     fn cost_to_end(&self) -> Option<usize> {
         self.cost_to(&self.end)
+    }
+    fn tiles_to(&self, pos: &Pos) -> Option<usize> {
+        let e = self.cells.get(pos)?.borrow();
+        let mut paths: Vec<Path> = e.paths.clone().into_iter().collect();
+        paths.sort_by(|a,b| a.cost().cmp(&b.cost()));
+        let best_cost = paths.get(0).and_then(|p| Some(p.cost()))?;
+        let pos: Vec<Pos> = paths.clone().into_iter()
+            .filter(|p|p.cost() == best_cost)
+            .map(|p|p.cells)
+            .flatten().collect();
+        let poss: HashSet<Pos> = pos.into_iter().collect();
+        Some(poss.len())
+    }
+    fn tiles_to_end(&self) -> Option<usize> {
+        self.tiles_to(&self.end)
     }
 }
 
@@ -429,6 +456,7 @@ mod tests {
             .expect("Parse failed");
         grid.solve();
         assert_eq!(grid.cost_to_end().expect("not solved"), 7036);
+        assert_eq!(grid.tiles_to_end().expect("not solved"), 45);
     }
 
     #[test]
@@ -456,5 +484,6 @@ mod tests {
             .expect("Parse failed");
         grid.solve();
         assert_eq!(grid.cost_to_end().expect("not solved"), 11048);
+        assert_eq!(grid.tiles_to_end().expect("not solved"), 64);
     }
 }
