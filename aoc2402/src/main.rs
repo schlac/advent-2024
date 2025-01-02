@@ -1,6 +1,8 @@
 fn main() {
     let input = include_str!("../input.txt");
-    println!("{}", solve(parse(input)));
+    let r = &parse(input);
+    println!("{}", solve1(r));
+    println!("{}", solve2(r));
 }
 
 type Reports = Vec<Vec<i8>>;
@@ -16,23 +18,38 @@ fn parse(input: &str) -> Reports {
         })
 }
 
-fn solve(r: Reports) -> usize {
+fn solve(r: Reports) -> impl Iterator<Item=Vec<i8>> {
     r.into_iter().filter(|r| r.iter().fold((true, 0i8, 0i8), |(ok, d, p), c| {
         let c = *c;
         if !ok || p == 0 { return (ok, d, c); }
         // println!("{} {} {}", ok, d, p);
         let diff = p - c;
         match diff.abs() {
-            ..1 => return (false, d, c),
-            1..=3 => return (diff * d >= 0, diff, c),
-            _ => return (false, d, c),
+            ..1 => (false, d, c),
+            1..=3 => (diff * d >= 0, diff, c),
+            _ => (false, d, c),
         }
-        // match d {
-        //     0 => (match p - c { ..1 => false, 1..=3 => true, _ => false, }, p - c, c),
-        //     ..0 => (match p - c { ..1 => false, 1..=3 => true, _ => false, }, d, c),
-        //     0.. => (match c - p { ..1 => false, 1..=3 => true, _ => false, }, d, c),
-        // }
-    }).0).count()
+    }).0)
+}
+
+fn solve1(r: &Reports) -> usize {
+    solve(r.clone()).count()
+}
+
+fn solve2(r: &Reports) -> usize {
+    let mut n = 0;
+    for r in r {
+        let mut rv = Vec::with_capacity(r.len());
+        for i in 0..r.len() {
+            let mut rm = r.clone();
+            rm.remove(i);
+            rv.push(rm);
+        }
+        if solve(rv).next().is_some() {
+            n += 1;
+        }
+    }
+    n
 }
 
 #[cfg(test)]
@@ -47,7 +64,9 @@ use super::*;
 1 3 2 4 5
 8 6 4 4 1
 1 3 6 7 9";
-    assert_eq!(solve(parse(input)), 2);
+    let r = &parse(input);
+    assert_eq!(solve1(r), 2);
+    assert_eq!(solve2(r), 4);
 }
 
 }
